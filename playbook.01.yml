@@ -1,0 +1,212 @@
+- name: Configurar usuario
+  hosts: web
+  # become: true
+  tasks:
+    - name: Install curl
+      apt:
+        name: curl
+        state: present
+
+    - name: Install wget
+      apt:
+        name: wget
+        state: present
+
+    - name: Install Git on Debian-based systems (apt)
+      apt:
+        name: git
+        state: present
+
+    - name: Install vim
+      apt:
+        name: vim
+        state: present
+    
+    - name: Install ZSH
+      apt:
+        name: zsh
+        state: present
+
+    - name: Remove file (delete /root/.oh-my-zsh)
+      ansible.builtin.file:
+        path: /root/.oh-my-zsh
+        state: absent
+    
+    - name: Clone a repo with separate git directory
+      ansible.builtin.git:
+        repo: https://github.com/ohmyzsh/ohmyzsh.git
+        dest: "~/.oh-my-zsh"
+      become_user: osboxes
+    
+    - name: Copy file with owner and permissions
+      ansible.builtin.copy:
+        src: /home/osboxes/.oh-my-zsh/templates/zshrc.zsh-template 
+        dest: /home/osboxes/.zshrc
+        remote_src: yes
+        mode: '0777'
+
+    - name: Change shell
+      user:
+        name: osboxes
+        shell: /bin/zsh  
+    
+    - name: Install required packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+        state: present
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Install Docker
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: present
+
+    - name: Start Docker service
+      systemd:
+        name: docker
+        state: started
+
+    - name: Install ZSH
+      apt:
+        name: dconf-cli
+        state: present
+
+    - name: Clone a repo gnome terminal
+      ansible.builtin.git:
+        repo: https://github.com/dracula/gnome-terminal
+        dest: "~/gnome-terminal"
+      become_user: osboxes
+
+    - name: Install gnome-terminall
+      ignore_errors: yes
+      expect:
+        command: /home/osboxes/gnome-terminal/install.sh
+        responses:
+          ".*Please select a color .*": "1"
+          ".*You need to create a new default profile to continue. Continue?.*": "YES"
+          ".*Please select a Gnome Terminal profile:.*": "1"
+          ".*Are you sure you want to overwrite the selected profile?.*": "YES"
+          ".*A dircolors adapted to solarized can be automatically downloaded.*": "1"
+          
+      environment:
+        DISPLAY: :0
+        DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/1000/bus
+      register: _output_script
+      become: yes
+      become_user: osboxes
+
+    - name: Add the string to .zshrc
+      lineinfile:
+        path: /home/osboxes/.zshrc
+        line: 'eval `dircolors /home/osboxes/dircolors`'
+        state: present
+
+    - name: Install fonts-firacode
+      apt:
+        name: fonts-firacode
+        state: present
+
+    - name: Clone a repo spaceship-prompt.git
+      ansible.builtin.git:
+        repo: https://github.com/denysdovhan/spaceship-prompt.git
+        dest: "/home/osboxes/.oh-my-zsh/custom/themes/spaceship-prompt"
+      become_user: osboxes
+  
+    - name: Criar um link simbólico
+      file:
+        src: "/home/osboxes/.oh-my-zsh/custom/themes/spaceship-prompt/spaceship.zsh-theme"
+        dest: "/home/osboxes/.oh-my-zsh/custom/themes/spaceship.zsh-theme"
+        state: link
+        force: true
+      become: yes
+      become_user: osboxes
+
+    - name: Replace ZSH_THEME setting in .zshrc
+      lineinfile:
+        path: ~/.zshrc  # Replace with the actual path to your .zshrc file
+        regexp: '^ZSH_THEME='  # Specify the line to search for
+        line: 'ZSH_THEME="spaceship"'  # Specify the new value for ZSH_THEME
+      # backup: yes
+      become: yes
+      become_user: osboxes
+
+    - name: Download a install zinit
+      get_url:
+        url: "https://raw.githubusercontent.com/zdharma-continuum/zinit/HEAD/scripts/install.sh"
+        dest: "/home/osboxes/install_zinit.sh"
+
+    - name: Change file permissions install_zinit.sh
+      ansible.builtin.file:
+        path: /home/osboxes/install_zinit.sh
+        mode: "0777"
+
+    - name: Install zinit
+      expect:
+        command: /home/osboxes/install_zinit.sh
+        responses:
+          ".*Enter y/n and press Return .*": "y"
+      become_user: osboxes
+
+    - name: Insert empty lines
+      ansible.builtin.lineinfile:
+        path: /home/osboxes/.zshrc
+        line: ""
+        insertafter: EOF
+      loop: "{{ range(2) }}"
+
+    - name: Add the string to .zshrc
+      lineinfile:
+        path: /home/osboxes/.zshrc
+        line: 'zinit light zdharma/fast-syntax-highlighting'
+        state: present
+    
+    - name: Add the string to .zshrc
+      lineinfile:
+        path: /home/osboxes/.zshrc
+        line: 'zinit light zsh-users/zsh-autosuggestions'
+        state: present
+    
+    - name: Add the string to .zshrc
+      lineinfile:
+        path: /home/osboxes/.zshrc
+        line: 'zinit light zsh-users/zsh-completions'
+        state: present
+
+    - name: Download a deb vscode
+      get_url:
+        url: "https://go.microsoft.com/fwlink/?LinkID=760868"
+        dest: "/home/osboxes/vscode.deb"
+    
+    - name: Install a .deb package
+      ansible.builtin.apt:
+        deb: "/home/osboxes/vscode.deb"
+
+    - name: Add Google Chrome APT repository
+      apt_repository:
+        repo: deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main
+        state: present
+        update_cache: yes
+      when: ansible_distribution == 'Ubuntu'  # Ensure it's an Ubuntu system
+
+    - name: Install Google Chrome
+      apt:
+        name: google-chrome-stable
+        state: present
+      when: ansible_distribution == 'Ubuntu'
+          
